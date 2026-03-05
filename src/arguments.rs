@@ -1,4 +1,4 @@
-use std::{fmt::Display, num::NonZeroUsize};
+use std::{fmt::Display, num::NonZeroUsize, path::PathBuf};
 
 use clap::{builder::OsStr, Args, FromArgMatches, Parser, Subcommand, ValueEnum};
 use regex::Regex;
@@ -14,6 +14,8 @@ pub struct Arguments {
 pub enum CommandMode {
     #[clap(about = "Download an asset")]
     Download(DownloadArgs),
+    #[clap(about = "Download assets from multiple releases")]
+    DownloadAll(DownloadAllArgs),
     #[clap(about = "Query information about assets or releases of a repository")]
     Query(QueryArgs),
 }
@@ -50,6 +52,56 @@ pub struct DownloadArgs {
         help = "Print downloaded filename to stdout"
     )]
     pub print_filename: bool,
+}
+
+#[derive(Args)]
+pub struct DownloadAllArgs {
+    #[clap(flatten)]
+    pub repository: Repository,
+    #[clap(flatten)]
+    pub connection_settings: ConnectionSettings,
+    #[clap(
+        short = 'e',
+        long = "release-pattern",
+        default_value = ".*",
+        help = "Regex pattern to filter release tags"
+    )]
+    pub release_pattern: String,
+    #[clap(
+        short = 'a',
+        long = "asset-pattern",
+        default_value = ".*",
+        help = "Regex pattern to filter asset names"
+    )]
+    pub asset_pattern: String,
+    #[clap(
+        short = 'p',
+        long = "prerelease",
+        default_value_t = false,
+        help = "Include prereleases"
+    )]
+    pub allow_prerelease: bool,
+    #[clap(
+        short = 'o',
+        long = "output-dir",
+        default_value = ".",
+        help = "Output directory (tag subdirectories created inside)"
+    )]
+    pub output_dir: PathBuf,
+    #[clap(
+        short = 'f',
+        long = "print-filenames",
+        default_value_t = false,
+        help = "Print downloaded file paths to stdout"
+    )]
+    pub print_filenames: bool,
+    #[clap(
+        short = 'x',
+        long = "overwrite",
+        default_value_t = false,
+        help = "Re-download files that already exist"
+    )]
+    pub overwrite: bool,
 }
 
 #[derive(Args)]

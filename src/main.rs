@@ -435,6 +435,117 @@ fn get_github_asset_api_url(owner: &str, repository: &str, asset_id: i64) -> Str
     format!("https://api.github.com/repos/{owner}/{repository}/releases/assets/{asset_id}")
 }
 
+fn download_all_assets(download_all_args: arguments::DownloadAllArgs) {
+    let compiled_release_pattern =
+        get_compiled_asset_pattern_or_exit(&download_all_args.release_pattern);
+    let compiled_asset_pattern =
+        get_compiled_asset_pattern_or_exit(&download_all_args.asset_pattern);
+
+    let repository = &download_all_args.repository;
+    let agent: Agent = get_default_agent(download_all_args.connection_settings.ip_type);
+    let releases = get_releases(
+        &agent,
+        repository,
+        &download_all_args.connection_settings.headers,
+        download_all_args.connection_settings.force_refresh,
+    );
+
+    let matching_releases: Vec<&Release> = releases
+        .iter()
+        .filter(|r| !r.prerelease || download_all_args.allow_prerelease)
+        .filter(|r| compiled_release_pattern.is_match(&r.tag_name))
+        .collect();
+
+    if matching_releases.is_empty() {
+        eprintln!("No releases matched the given filters");
+        process::exit(1);
+    }
+
+    let mut total_assets_downloaded: usize = 0;
+    let mut releases_with_downloads: usize = 0;
+
+    for release in &matching_releases {
+        let assets = find_assets_in_release(release, &compiled_asset_pattern);
+        if assets.is_empty() {
+            continue;
+        }
+
+        let mut release_had_download = false;
+
+        for asset in &assets {
+            let out_path = download_all_args
+                .output_dir
+                .join(&release.tag_name)
+                .join(&asset.name);
+
+            if out_path.exists() && !download_all_args.overwrite {
+                eprintln!("Skipping \"{}\" (already exists)", out_path.display());
+                continue;
+            }
+
+            if let Some(parent) = out_path.parent() {
+                fs::create_dir_all(parent).unwrap_or_else(|e| {
+                    eprintln!("Error creating directory \"{}\":\n{e}", parent.display());
+                    process::exit(1);
+                });
+            }
+
+            let url: String;
+            let mut headers = download_all_args.connection_settings.headers.clone();
+            if matches!(repository.website, GitWebsite::GitHub) {
+                headers.push("Accept: application/octet-stream".to_string());
+                headers.push("X-GitHub-Api-Version: 2022-11-28".to_string());
+                url = get_github_asset_api_url(&repository.owner, &repository.name, asset.id);
+            } else {
+                url = asset.browser_download_url.clone();
+            }
+
+            eprintln!("Downloading \"{}\"", out_path.display());
+
+            let response = make_get_request(&agent, &url, &headers).unwrap_or_else(|e| {
+                eprintln!("Error downloading file:\n{e}");
+                process::exit(1);
+            });
+
+            let out_file = File::create(&out_path).unwrap_or_else(|e| {
+                eprintln!("Error creating file \"{}\":\n{e}", out_path.display());
+                process::exit(1);
+            });
+
+            let content_length_option = get_content_length(&response);
+            let pb_option = create_and_init_progress_bar(content_length_option);
+
+            stream_response_into_file(response, out_file, &pb_option);
+
+            if let Some(ref pb) = pb_option {
+                pb.finish();
+                eprintln!();
+            }
+
+            if download_all_args.print_filenames {
+                println!("{}", out_path.display());
+            }
+
+            total_assets_downloaded += 1;
+            release_had_download = true;
+        }
+
+        if release_had_download {
+            releases_with_downloads += 1;
+        }
+    }
+
+    if total_assets_downloaded == 0 {
+        eprintln!("No assets were downloaded");
+        process::exit(1);
+    }
+
+    eprintln!(
+        "Downloaded {} asset(s) across {} release(s)",
+        total_assets_downloaded, releases_with_downloads
+    );
+}
+
 fn download_assets(mut download_args: arguments::DownloadArgs) {
     let compiled_asset_pattern = get_compiled_asset_pattern_or_exit(&download_args.asset_pattern);
 
@@ -521,6 +632,10 @@ fn main() {
         },
         arguments::CommandMode::Download(download_args) => {
             download_assets(download_args);
+            exit(0);
+        }
+        arguments::CommandMode::DownloadAll(download_all_args) => {
+            download_all_assets(download_all_args);
             exit(0);
         }
     };

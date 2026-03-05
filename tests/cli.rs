@@ -55,9 +55,10 @@ fn help_is_as_expected() -> Result<(), Box<dyn std::error::Error>> {
         r#"Usage: grd <COMMAND>
 
 Commands:
-  download  Download an asset
-  query     Query information about assets or releases of a repository
-  help      Print this message or the help of the given subcommand(s)
+  download      Download an asset
+  download-all  Download assets from multiple releases
+  query         Query information about assets or releases of a repository
+  help          Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -181,4 +182,47 @@ Options:
 
     Ok(())
 }
+#[test]
+fn download_all_help_is_as_expected() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("grd")?;
+
+    cmd.arg("download-all");
+    cmd.arg("--help");
+    cmd.assert().success().code(0).stdout(
+        r#"Download assets from multiple releases
+
+Usage: grd download-all [OPTIONS] <REPOSITORY>
+
+Arguments:
+  <REPOSITORY>  Repository url (scheme defaults to "https" unless explicitly set to "http" with "http://")
+
+Options:
+  -w, --website-type <WEBSITE_TYPE>
+          If omitted, it will be guessed from repository url [possible values: github, gitea, gitlab]
+  -i, --ip-type <IP_TYPE>
+          IP address type to use [default: any] [possible values: any, ipv4, ipv6]
+      --header <HEADERS>
+          Http header to use, can be specified multiple times
+  -r, --force-refresh
+          Bypass release cache and fetch fresh data from the API
+  -e, --release-pattern <RELEASE_PATTERN>
+          Regex pattern to filter release tags [default: .*]
+  -a, --asset-pattern <ASSET_PATTERN>
+          Regex pattern to filter asset names [default: .*]
+  -p, --prerelease
+          Include prereleases
+  -o, --output-dir <OUTPUT_DIR>
+          Output directory (tag subdirectories created inside) [default: .]
+  -f, --print-filenames
+          Print downloaded file paths to stdout
+  -x, --overwrite
+          Re-download files that already exist
+  -h, --help
+          Print help
+"#,
+    );
+
+    Ok(())
+}
+
 // #### end help tests ####
