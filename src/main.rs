@@ -6,7 +6,8 @@ use std::{
     net::ToSocketAddrs,
     path::PathBuf,
     process::{self, exit},
-    time::SystemTime,
+    thread,
+    time::{Duration, SystemTime},
 };
 
 use arguments::{GitWebsite, IpType};
@@ -311,6 +312,40 @@ fn make_get_request(
     request.call().map_err(Box::new)
 }
 
+fn make_get_request_with_retry(
+    agent: &Agent,
+    url: &str,
+    headers: &[String],
+    max_retries: u32,
+) -> Result<Response, Box<ureq::Error>> {
+    for attempt in 0..=max_retries {
+        match make_get_request(agent, url, headers) {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                let should_retry = matches!(*e, ureq::Error::Status(429, _) | ureq::Error::Status(403, _));
+                if should_retry && attempt < max_retries {
+                    let delay = if let ureq::Error::Status(_, ref resp) = *e {
+                        resp.header("retry-after")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or_else(|| (1u64 << attempt).min(60))
+                    } else {
+                        (1u64 << attempt).min(60)
+                    };
+                    eprintln!(
+                        "Rate limited, retrying in {delay}s... (attempt {}/{})",
+                        attempt + 1,
+                        max_retries
+                    );
+                    thread::sleep(Duration::from_secs(delay));
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
+    unreachable!()
+}
+
 fn get_content_length(response: &Response) -> Option<usize> {
     response
         .header("content-length")
@@ -502,10 +537,11 @@ fn download_all_assets(download_all_args: arguments::DownloadAllArgs) {
 
             eprintln!("Downloading \"{}\"", out_path.display());
 
-            let response = make_get_request(&agent, &url, &headers).unwrap_or_else(|e| {
-                eprintln!("Error downloading file:\n{e}");
-                process::exit(1);
-            });
+            let response =
+                make_get_request_with_retry(&agent, &url, &headers, 5).unwrap_or_else(|e| {
+                    eprintln!("Error downloading file:\n{e}");
+                    process::exit(1);
+                });
 
             let out_file = File::create(&out_path).unwrap_or_else(|e| {
                 eprintln!("Error creating file \"{}\":\n{e}", out_path.display());
@@ -521,6 +557,8 @@ fn download_all_assets(download_all_args: arguments::DownloadAllArgs) {
                 pb.finish();
                 eprintln!();
             }
+
+            thread::sleep(Duration::from_millis(200));
 
             if download_all_args.print_filenames {
                 println!("{}", out_path.display());
