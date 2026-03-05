@@ -7,28 +7,22 @@ The binary is called `grd`.
 
 ## Installation
 
-### From crates.io
-
-```bash
-cargo install gitweb-release-downloader
-```
-
 ### From source
 
 ```bash
-git clone https://github.com/cm-auto/gitweb-release-downloader.git
+git clone https://github.com/HRKings/gitweb-release-downloader.git
 cd gitweb-release-downloader
 cargo install --path .
 ```
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `download` | Download a single asset from a release |
-| `download-all` | Download assets from multiple releases |
-| `query releases` | List release tags |
-| `query assets` | List assets in a release |
+| Command          | Description                            |
+| ---------------- | -------------------------------------- |
+| `download`       | Download a single asset from a release |
+| `download-all`   | Download assets from multiple releases |
+| `query releases` | List release tags                      |
+| `query assets`   | List assets in a release               |
 
 ## Usage
 
@@ -81,14 +75,14 @@ grd download-all "github.com/user/repo" \
   --asset-pattern "linux.*amd64"
 ```
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--release-pattern` | `-e` | `.*` | Regex to filter release tags |
-| `--asset-pattern` | `-a` | `.*` | Regex to filter asset names |
-| `--prerelease` | `-p` | `false` | Include prereleases |
-| `--output-dir` | `-o` | `.` | Output directory (tag subdirs created inside) |
-| `--print-filenames` | `-f` | `false` | Print downloaded file paths to stdout |
-| `--overwrite` | `-x` | `false` | Re-download files that already exist |
+| Flag                | Short | Default | Description                                   |
+| ------------------- | ----- | ------- | --------------------------------------------- |
+| `--release-pattern` | `-e`  | `.*`    | Regex to filter release tags                  |
+| `--asset-pattern`   | `-a`  | `.*`    | Regex to filter asset names                   |
+| `--prerelease`      | `-p`  | `false` | Include prereleases                           |
+| `--output-dir`      | `-o`  | `.`     | Output directory (tag subdirs created inside) |
+| `--print-filenames` | `-f`  | `false` | Print downloaded file paths to stdout         |
+| `--overwrite`       | `-x`  | `false` | Re-download files that already exist          |
 
 Run again without `--overwrite` and existing files are skipped:
 
@@ -126,12 +120,12 @@ grd query assets "github.com/VSCodium/vscodium" --tag 1.85.1.24019 --asset-patte
 
 These flags are available on all commands that make network requests:
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--website-type` | `-w` | Force website type (`github`, `gitea`, `gitlab`) |
-| `--ip-type` | `-i` | Restrict to `ipv4` or `ipv6` (default: `any`) |
-| `--header` | | Custom HTTP header (`"Name: value"`), repeatable |
-| `--force-refresh` | `-r` | Bypass the release cache |
+| Flag              | Short | Description                                      |
+| ----------------- | ----- | ------------------------------------------------ |
+| `--website-type`  | `-w`  | Force website type (`github`, `gitea`, `gitlab`) |
+| `--ip-type`       | `-i`  | Restrict to `ipv4` or `ipv6` (default: `any`)    |
+| `--header`        |       | Custom HTTP header (`"Name: value"`), repeatable |
+| `--force-refresh` | `-r`  | Bypass the release cache                         |
 
 ### Private repositories
 
