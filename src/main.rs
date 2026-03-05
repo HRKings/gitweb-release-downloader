@@ -116,36 +116,76 @@ fn get_releases_api_url(repository: &arguments::Repository) -> String {
     }
 }
 
+fn get_platform_headers(website: &GitWebsite) -> Vec<String> {
+    match website {
+        GitWebsite::GitHub => vec!["X-GitHub-Api-Version: 2022-11-28".to_string()],
+        _ => vec![],
+    }
+}
+
 fn get_releases(
     agent: &Agent,
     repository: &arguments::Repository,
     headers: &[String],
 ) -> Vec<Release> {
-    let releases_address = get_releases_api_url(repository);
+    let base_url = get_releases_api_url(repository);
+    let mut all_releases: Vec<Release> = Vec::new();
+    let mut page: u32 = 1;
 
-    let response = make_get_request(agent, &releases_address, headers).unwrap_or_else(|e| {
-        eprintln!("HTTP request failed:\n{e}");
-        process::exit(1);
-    });
-
-    let releases_json_string = response.into_string().unwrap_or_else(|e| {
-        eprintln!("Could not get json from response:\n{e}");
-        process::exit(1);
-    });
-
-    let releases = match repository.website {
-        arguments::GitWebsite::GitHub | arguments::GitWebsite::Gitea => {
-            serde_json::from_str::<Vec<Release>>(&releases_json_string)
-        }
-        arguments::GitWebsite::GitLab => {
-            serde_json::from_str::<Vec<GitLabRelease>>(&releases_json_string)
-                .map(|e| e.into_iter().map(Into::into).collect())
-        }
+    let page_size = match repository.website {
+        GitWebsite::GitHub | GitWebsite::GitLab => 100,
+        GitWebsite::Gitea => 50,
     };
-    releases.unwrap_or_else(|e| {
-        eprintln!("Could not deserialize json:\n{e}");
-        process::exit(1);
-    })
+
+    let page_size_param = match repository.website {
+        GitWebsite::GitHub | GitWebsite::GitLab => "per_page",
+        GitWebsite::Gitea => "limit",
+    };
+
+    let platform_headers = get_platform_headers(&repository.website);
+    let all_headers: Vec<String> = platform_headers
+        .iter()
+        .chain(headers.iter())
+        .cloned()
+        .collect();
+
+    loop {
+        let separator = if base_url.contains('?') { '&' } else { '?' };
+        let url = format!("{base_url}{separator}{page_size_param}={page_size}&page={page}");
+
+        let response = make_get_request(agent, &url, &all_headers).unwrap_or_else(|e| {
+            eprintln!("HTTP request failed:\n{e}");
+            process::exit(1);
+        });
+
+        let json_string = response.into_string().unwrap_or_else(|e| {
+            eprintln!("Could not get json from response:\n{e}");
+            process::exit(1);
+        });
+
+        let page_releases: Vec<Release> = match repository.website {
+            GitWebsite::GitHub | GitWebsite::Gitea => {
+                serde_json::from_str(&json_string)
+            }
+            GitWebsite::GitLab => {
+                serde_json::from_str::<Vec<GitLabRelease>>(&json_string)
+                    .map(|e| e.into_iter().map(Into::into).collect())
+            }
+        }
+        .unwrap_or_else(|e| {
+            eprintln!("Could not deserialize json:\n{e}");
+            process::exit(1);
+        });
+
+        if page_releases.is_empty() {
+            break;
+        }
+
+        all_releases.extend(page_releases);
+        page += 1;
+    }
+
+    all_releases
 }
 
 fn get_compiled_asset_pattern_or_exit(pattern: &str) -> Regex {
@@ -353,6 +393,10 @@ fn download_assets(mut download_args: arguments::DownloadArgs) {
             .connection_settings
             .headers
             .push("Accept: application/octet-stream".to_string());
+        download_args
+            .connection_settings
+            .headers
+            .push("X-GitHub-Api-Version: 2022-11-28".to_string());
         url_buffer = get_github_asset_api_url(&repository.owner, &repository.name, asset.id);
         url_buffer.as_str()
     } else {
